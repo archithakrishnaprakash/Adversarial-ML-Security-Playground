@@ -1,0 +1,48 @@
+# Brings up the backend and frontend together for local testing or a
+# single-server deployment. See README.md "12. Deploying with Docker" for
+# the two things you MUST set correctly before this works anywhere but
+# localhost: NEXT_PUBLIC_API_URL and ALLOWED_ORIGINS.
+#
+# Usage:
+#   cp .env.example .env      # then edit .env
+#   docker compose up --build -d
+#   docker compose logs -f
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Comma-separated list of origins allowed to call this API from a
+      # browser. Defaults to "*" (open) if unset — fine for a quick test,
+      # not for anything public-facing.
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      # Optional: only needed if you've downloaded UNSW-NB15 (see README §5b)
+      # and want the "real" cybersecurity dataset selectable. Uncomment and
+      # mount the directory as a volume below if so.
+      # - UNSW_NB15_DATA_DIR=/app/data/unsw_nb15
+    # volumes:
+    #   - ./backend/data/unsw_nb15:/app/data/unsw_nb15:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Must be reachable from the END USER'S BROWSER, not from inside the
+        # Docker network — client components call this directly (lib/api.js).
+        # "http://backend:8000" will NOT work here even though it works
+        # container-to-container; the browser has no idea what "backend" is.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
